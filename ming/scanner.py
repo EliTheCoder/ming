@@ -56,7 +56,7 @@ async def _udp_probe(ip: str, port: int, timeout: float) -> str:
 
         try:
             await loop.sock_sendall(sock, b"\x00\x00")
-        except (ConnectionRefusedError, ConnectionResetError):
+        except ConnectionRefusedError, ConnectionResetError:
             return "reachable"
         except OSError:
             return "closed"
@@ -66,7 +66,7 @@ async def _udp_probe(ip: str, port: int, timeout: float) -> str:
             return "responded"
         except TimeoutError:
             return "closed"
-        except (ConnectionRefusedError, ConnectionResetError):
+        except ConnectionRefusedError, ConnectionResetError:
             return "reachable"
         except OSError:
             return "closed"

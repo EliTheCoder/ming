@@ -13,7 +13,7 @@ async def resolve_all(ips: list[str]) -> dict[str, str | None]:
         try:
             result = await loop.run_in_executor(None, socket.gethostbyaddr, ip)
             return ip, result[0]  # (hostname, aliaslist, ipaddrlist)
-        except (socket.herror, socket.gaierror, OSError):
+        except socket.herror, socket.gaierror, OSError:
             return ip, None
 
     pairs = await asyncio.gather(*[_resolve_one(ip) for ip in ips])

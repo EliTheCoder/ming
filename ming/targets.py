@@ -72,9 +72,7 @@ def _is_wild(octet: str) -> bool:
 def _wildcard_to_cidr(octets: list[str]) -> str:
     first_x = next(i for i, o in enumerate(octets) if _is_wild(o))
     if any(not _is_wild(o) for o in octets[first_x:]):
-        raise ValueError(
-            "Wildcard 'x' octets must be trailing (e.g. 192.168.1.x, not 192.x.1.x)"
-        )
+        raise ValueError("Wildcard 'x' octets must be trailing (e.g. 192.168.1.x, not 192.x.1.x)")
     prefix_bits = first_x * 8
     cidr_octets = octets[:first_x] + ["0"] * (4 - first_x)
     return ".".join(cidr_octets) + f"/{prefix_bits}"
