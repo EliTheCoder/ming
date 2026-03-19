@@ -19,6 +19,12 @@ from ming.ports import port_color
 console = Console()
 
 
+def _ip_sort_key(ip: str) -> tuple:
+    """Sort key that handles mixed IPv4/IPv6 (IPv4 first, then IPv6 by value)."""
+    addr = ipaddress.ip_address(ip)
+    return (addr.version, int(addr))
+
+
 class ScanDisplay:
     def __init__(
         self,
@@ -102,7 +108,7 @@ class ScanDisplay:
 
     def print_quiet_results(self) -> None:
         """Print all results with hostnames. Used when --quiet --resolve."""
-        for ip in sorted(self.results, key=ipaddress.ip_address):
+        for ip in sorted(self.results, key=_ip_sort_key):
             data = self.results[ip]
             hostname = self.hostnames.get(ip) or ""
             suffix = f" ({hostname})" if hostname else ""
@@ -130,7 +136,7 @@ class ScanDisplay:
             table.add_column("Reachable", justify="center")
             table.add_column("Responded Ports")
 
-        for ip in sorted(self.results, key=ipaddress.ip_address):
+        for ip in sorted(self.results, key=_ip_sort_key):
             data = self.results[ip]
             is_new = ip in self.new_ips
             ip_text = Text(ip, style="bold green" if is_new else "bold white")

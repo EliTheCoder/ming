@@ -2,6 +2,10 @@ import asyncio
 import csv
 import io
 import ipaddress
+
+def _ip_sort_key(ip: str) -> tuple:
+    addr = ipaddress.ip_address(ip)
+    return (addr.version, int(addr))
 import json
 import time
 
@@ -234,7 +238,7 @@ def _format_json(
     hostnames: dict[str, str | None] | None,
 ) -> str:
     rows = []
-    for ip in sorted(results, key=ipaddress.ip_address):
+    for ip in sorted(results, key=_ip_sort_key):
         row: dict = {"ip": ip}
         if hostnames is not None:
             row["hostname"] = hostnames.get(ip)
@@ -261,7 +265,7 @@ def _format_csv(
     buf = io.StringIO()
     writer = csv.DictWriter(buf, fieldnames=fieldnames, extrasaction="ignore")
     writer.writeheader()
-    for ip in sorted(results, key=ipaddress.ip_address):
+    for ip in sorted(results, key=_ip_sort_key):
         row: dict = {"ip": ip}
         if hostnames is not None:
             row["hostname"] = hostnames.get(ip)
