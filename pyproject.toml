@@ -1,0 +1,19 @@
+[project]
+name = "ming"
+version = "0.1.0"
+description = "Multi-ping network scanner"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "click>=8.3.1",
+    "icmplib>=3.0.4",
+    "rich>=14.3.3",
+]
+
+[project.scripts]
+ming = "ming.cli:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+]
