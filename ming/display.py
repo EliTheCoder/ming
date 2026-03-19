@@ -1,4 +1,5 @@
 import ipaddress
+import types
 from datetime import datetime
 
 from rich.console import Console, Group
@@ -71,12 +72,12 @@ class ScanDisplay:
             self._live.__enter__()
         return self
 
-    def __exit__(self, *args: object) -> None:
+    def __exit__(self, exc_type: type[BaseException] | None, exc_val: BaseException | None, exc_tb: types.TracebackType | None) -> None:
         if not self.quiet and not self.silent:
             if self._show_progress:
                 self._show_progress = False
                 self._live.update(self._render())
-            self._live.__exit__(*args)
+            self._live.__exit__(exc_type, exc_val, exc_tb)
 
     # ------------------------------------------------------------------
     # Public update methods
