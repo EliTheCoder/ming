@@ -150,11 +150,15 @@ def main(
         eff_timeout = timeout
 
     if concurrency is None:
-        eff_concurrency = {
-            "icmp": ICMP_CONCURRENCY,
-            "tcp": TCP_CONCURRENCY,
-            "udp": UDP_CONCURRENCY,
-        }[mode_label]
+        base = {"icmp": ICMP_CONCURRENCY, "tcp": TCP_CONCURRENCY, "udp": UDP_CONCURRENCY}[
+            mode_label
+        ]
+        # Scale down TCP concurrency for subnet scans — high parallelism floods the
+        # local router when all traffic shares the same gateway.
+        if mode_label == "tcp" and n_ips > 1:
+            eff_concurrency = min(base, max(50, base // max(1, n_ips // 5)))
+        else:
+            eff_concurrency = base
     else:
         eff_concurrency = concurrency
 
