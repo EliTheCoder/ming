@@ -57,7 +57,7 @@ def _expand_one(destination: str) -> list[str]:
     # Hostname or domain — resolve via DNS (both IPv4 and IPv6)
     try:
         infos = socket.getaddrinfo(destination, None)
-        ips = list(dict.fromkeys(info[4][0] for info in infos))
+        ips = list(dict.fromkeys(str(info[4][0]) for info in infos))
         if not ips:
             raise ValueError(f"Cannot resolve destination: '{destination}'")
         return ips
