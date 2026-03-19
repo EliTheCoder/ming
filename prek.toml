@@ -1,0 +1,8 @@
+[[repos]]
+repo = "local"
+hooks = [
+  { id = "uv-lock", name = "uv lock", language = "system", entry = "uv lock", pass_filenames = false, files = "^pyproject\\.toml$" },
+  { id = "ruff-check", name = "ruff check", language = "system", entry = "uv run ruff check --fix", types = ["python"] },
+  { id = "ruff-format", name = "ruff format", language = "system", entry = "uv run ruff format", types = ["python"] },
+  { id = "ty-check", name = "ty check", language = "system", entry = "uv run ty check ming/", pass_filenames = false, types = ["python"] },
+]
