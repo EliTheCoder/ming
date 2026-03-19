@@ -5,7 +5,7 @@ import socket
 # Matches an IPv4-like address where each octet is either a number or 'x'
 # e.g. 192.168.1.x  192.168.x.x  10.x.x.x
 _IP_WILD_RE = re.compile(
-    r"^(\d{1,3}|x)\.(\d{1,3}|x)\.(\d{1,3}|x)\.(\d{1,3}|x)$",
+    r"^(\d{1,3}|x+)\.(\d{1,3}|x+)\.(\d{1,3}|x+)\.(\d{1,3}|x+)$",
     re.IGNORECASE,
 )
 
@@ -23,7 +23,7 @@ def expand_targets(destination: str) -> list[str]:
     m = _IP_WILD_RE.match(destination)
     if m:
         octets = list(m.groups())
-        if any(o.lower() == "x" for o in octets):
+        if any(_is_wild(o) for o in octets):
             cidr = _wildcard_to_cidr(octets)
             network = ipaddress.ip_network(cidr, strict=False)
             return [str(ip) for ip in network]
@@ -48,9 +48,13 @@ def expand_targets(destination: str) -> list[str]:
         raise ValueError(f"Cannot resolve destination: '{destination}'")
 
 
+def _is_wild(octet: str) -> bool:
+    return bool(re.fullmatch(r"x+", octet, re.IGNORECASE))
+
+
 def _wildcard_to_cidr(octets: list[str]) -> str:
-    first_x = next(i for i, o in enumerate(octets) if o.lower() == "x")
-    if any(o.lower() != "x" for o in octets[first_x:]):
+    first_x = next(i for i, o in enumerate(octets) if _is_wild(o))
+    if any(not _is_wild(o) for o in octets[first_x:]):
         raise ValueError(
             "Wildcard 'x' octets must be trailing (e.g. 192.168.1.x, not 192.x.1.x)"
         )
