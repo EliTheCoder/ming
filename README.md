@@ -140,7 +140,7 @@ Results are displayed as a live table that updates in real time. Only hosts that
 
 ## Notes
 
-- ICMP mode uses unprivileged sockets via [icmplib](https://github.com/ValentinBELYN/icmplib) — no root required on most systems.
+- ICMP mode uses unprivileged sockets via [icmplib](https://github.com/ValentinBELYN/icmplib) — no root required on Linux/macOS. On Windows, ICMP requires Administrator privileges.
 - TCP mode performs a full connect scan — no raw sockets, no root required.
 - UDP mode uses `connect()` + `send()` and detects reachability from ICMP port-unreachable responses — no root required.
 - Concurrency limits: ICMP 150 · TCP 500 · UDP 200 simultaneous probes.
