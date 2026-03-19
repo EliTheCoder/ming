@@ -46,8 +46,8 @@ UDP_METHODS = {"udp"}
               help="Probe timeout in seconds (overrides per-protocol default).")
 @click.option("--concurrency", "-c", type=int, default=None,
               help="Max concurrent probes (overrides per-protocol default).")
-@click.option("--resolve", "-r", is_flag=True, default=False,
-              help="Reverse DNS lookup on responding IPs.")
+@click.option("--resolve/--no-resolve", "-r/-R", default=True,
+              help="Reverse DNS lookup on responding IPs (default: on).")
 @click.option("--watch", "-w", is_flag=True, default=False,
               help="Re-scan repeatedly on --interval.")
 @click.option("--interval", "-i", type=int, default=30,
