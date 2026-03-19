@@ -2,9 +2,7 @@
 
 A fast, async multi-ping network scanner with a live terminal UI.
 
-```
-ming 192.168.1.x tcp 80,443,8000-8080
-```
+![demo](demo.gif)
 
 ---
 
