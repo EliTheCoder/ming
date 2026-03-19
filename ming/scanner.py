@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import ipaddress
 import socket
 from collections.abc import Callable
@@ -29,10 +30,8 @@ async def _tcp_probe(ip: str, port: int, timeout: float) -> bool:
             timeout=timeout,
         )
         writer.close()
-        try:
+        with contextlib.suppress(Exception):
             await writer.wait_closed()
-        except Exception:
-            pass
         return True
     except Exception:
         return False
@@ -65,7 +64,7 @@ async def _udp_probe(ip: str, port: int, timeout: float) -> str:
         try:
             await asyncio.wait_for(loop.sock_recv(sock, 1024), timeout=timeout)
             return "responded"
-        except asyncio.TimeoutError:
+        except TimeoutError:
             return "closed"
         except (ConnectionRefusedError, ConnectionResetError):
             return "reachable"

@@ -61,8 +61,8 @@ def _expand_one(destination: str) -> list[str]:
         if not ips:
             raise ValueError(f"Cannot resolve destination: '{destination}'")
         return ips
-    except socket.gaierror:
-        raise ValueError(f"Cannot resolve destination: '{destination}'")
+    except socket.gaierror as err:
+        raise ValueError(f"Cannot resolve destination: '{destination}'") from err
 
 
 def _is_wild(octet: str) -> bool:
