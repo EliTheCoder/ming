@@ -161,6 +161,7 @@ def main(
                 silent=use_silent,
                 resolve=resolve,
                 watch_scan=watch_scan_num,
+                show_progress=n_ips > 1,
             ) as display:
 
                 def on_result(ip: str, data: dict) -> None:

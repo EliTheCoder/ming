@@ -35,6 +35,7 @@ class ScanDisplay:
         silent: bool = False,
         resolve: bool = False,
         watch_scan: int = 0,
+        show_progress: bool = True,
     ) -> None:
         self.mode = mode
         self.quiet = quiet
@@ -45,16 +46,19 @@ class ScanDisplay:
         self.new_ips: set[str] = set()
         self._watch_scan = watch_scan
 
+        self._show_progress = show_progress and not quiet and not silent
+
         if not quiet and not silent:
-            self.progress = Progress(
-                SpinnerColumn(),
-                TextColumn("[progress.description]{task.description}"),
-                BarColumn(),
-                MofNCompleteColumn(),
-                TimeRemainingColumn(),
-                console=console,
-            )
-            self._task_id = self.progress.add_task("Scanning", total=total)
+            if self._show_progress:
+                self.progress = Progress(
+                    SpinnerColumn(),
+                    TextColumn("[progress.description]{task.description}"),
+                    BarColumn(),
+                    MofNCompleteColumn(),
+                    TimeRemainingColumn(),
+                    console=console,
+                )
+                self._task_id = self.progress.add_task("Scanning", total=total)
             self._live = Live(
                 self._render(),
                 console=console,
@@ -89,7 +93,8 @@ class ScanDisplay:
     def advance(self) -> None:
         if self.quiet or self.silent:
             return
-        self.progress.advance(self._task_id)
+        if self._show_progress:
+            self.progress.advance(self._task_id)
         self._live.update(self._render())
 
     def set_hostnames(self, hostnames: dict[str, str | None]) -> None:
@@ -168,7 +173,8 @@ class ScanDisplay:
             now = datetime.now().strftime("%H:%M:%S")
             items.append(Text(f"  Scan #{self._watch_scan} — {now}", style="bold cyan"))
         items.append(self._build_table())
-        items.append(self.progress)
+        if self._show_progress:
+            items.append(self.progress)
         return Group(*items)
 
 
