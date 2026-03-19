@@ -21,12 +21,12 @@ A fast, async multi-ping network scanner with a live terminal UI.
 
 ## Installation
 
-Requires Python 3.11+ and [uv](https://github.com/astral-sh/uv).
-
 ```sh
-git clone https://github.com/yourname/ming
-cd ming
-uv pip install -e .
+# Recommended — installs as a standalone tool
+uv tool install mingping
+
+# pip
+pip install mingping
 ```
 
 Then run with:
