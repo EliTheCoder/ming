@@ -84,17 +84,27 @@ async def run_icmp_scan(
     timeout: float = ICMP_TIMEOUT,
     concurrency: int = ICMP_CONCURRENCY,
 ) -> None:
-    sem = asyncio.Semaphore(concurrency)
+    queue: asyncio.Queue = asyncio.Queue()
+    for ip in ips:
+        queue.put_nowait(ip)
 
-    async def scan_one(ip: str) -> None:
-        async with sem:
-            alive, rtt = await _icmp_probe(ip, timeout)
-        on_progress()
-        if alive:
-            on_result(ip, {"rtt": rtt})
+    async def worker() -> None:
+        while True:
+            try:
+                ip = queue.get_nowait()
+            except asyncio.QueueEmpty:
+                return
+            try:
+                alive, rtt = await _icmp_probe(ip, timeout)
+            except asyncio.CancelledError:
+                return
+            on_progress()
+            if alive:
+                on_result(ip, {"rtt": rtt})
 
+    n_workers = min(concurrency, len(ips)) if ips else 0
     await asyncio.gather(
-        *[asyncio.create_task(scan_one(ip)) for ip in ips],
+        *[asyncio.create_task(worker()) for _ in range(n_workers)],
         return_exceptions=True,
     )
 
@@ -107,21 +117,34 @@ async def run_tcp_scan(
     timeout: float = TCP_TIMEOUT,
     concurrency: int = TCP_CONCURRENCY,
 ) -> None:
-    sem = asyncio.Semaphore(concurrency)
+    queue: asyncio.Queue = asyncio.Queue()
+    for ip in ips:
+        for port in ports:
+            queue.put_nowait((ip, port))
+
     ip_ports: dict[str, list[int]] = {}
 
-    async def scan_one(ip: str, port: int) -> None:
-        async with sem:
-            is_open = await _tcp_probe(ip, port, timeout)
-        on_progress()
-        if is_open:
-            if ip not in ip_ports:
-                ip_ports[ip] = []
-            ip_ports[ip].append(port)
-            on_result(ip, {"open_ports": sorted(ip_ports[ip])})
+    async def worker() -> None:
+        while True:
+            try:
+                ip, port = queue.get_nowait()
+            except asyncio.QueueEmpty:
+                return
+            try:
+                is_open = await _tcp_probe(ip, port, timeout)
+            except asyncio.CancelledError:
+                return
+            on_progress()
+            if is_open:
+                if ip not in ip_ports:
+                    ip_ports[ip] = []
+                ip_ports[ip].append(port)
+                on_result(ip, {"open_ports": sorted(ip_ports[ip])})
 
+    total = len(ips) * len(ports)
+    n_workers = min(concurrency, total) if total else 0
     await asyncio.gather(
-        *[asyncio.create_task(scan_one(ip, port)) for ip in ips for port in ports],
+        *[asyncio.create_task(worker()) for _ in range(n_workers)],
         return_exceptions=True,
     )
 
@@ -134,24 +157,37 @@ async def run_udp_scan(
     timeout: float = UDP_TIMEOUT,
     concurrency: int = UDP_CONCURRENCY,
 ) -> None:
-    sem = asyncio.Semaphore(concurrency)
+    queue: asyncio.Queue = asyncio.Queue()
+    for ip in ips:
+        for port in ports:
+            queue.put_nowait((ip, port))
+
     ip_data: dict[str, dict] = {}
 
-    async def scan_one(ip: str, port: int) -> None:
-        async with sem:
-            result = await _udp_probe(ip, port, timeout)
-        on_progress()
-        if result in ("reachable", "responded"):
-            if ip not in ip_data:
-                ip_data[ip] = {"reachable": False, "responded_ports": []}
-            if result == "reachable":
-                ip_data[ip]["reachable"] = True
-            else:
-                ip_data[ip]["responded_ports"].append(port)
-                ip_data[ip]["responded_ports"].sort()
-            on_result(ip, dict(ip_data[ip]))
+    async def worker() -> None:
+        while True:
+            try:
+                ip, port = queue.get_nowait()
+            except asyncio.QueueEmpty:
+                return
+            try:
+                result = await _udp_probe(ip, port, timeout)
+            except asyncio.CancelledError:
+                return
+            on_progress()
+            if result in ("reachable", "responded"):
+                if ip not in ip_data:
+                    ip_data[ip] = {"reachable": False, "responded_ports": []}
+                if result == "reachable":
+                    ip_data[ip]["reachable"] = True
+                else:
+                    ip_data[ip]["responded_ports"].append(port)
+                    ip_data[ip]["responded_ports"].sort()
+                on_result(ip, dict(ip_data[ip]))
 
+    total = len(ips) * len(ports)
+    n_workers = min(concurrency, total) if total else 0
     await asyncio.gather(
-        *[asyncio.create_task(scan_one(ip, port)) for ip in ips for port in ports],
+        *[asyncio.create_task(worker()) for _ in range(n_workers)],
         return_exceptions=True,
     )
