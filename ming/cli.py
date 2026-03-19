@@ -39,21 +39,51 @@ UDP_METHODS = {"udp"}
 @click.argument("destination")
 @click.argument("method", default="icmp", required=False)
 @click.argument("port_spec", default=None, required=False)
-@click.option("--output", "-o", "output_format",
-              type=click.Choice(["json", "csv"]), default=None,
-              help="Output format — prints to stdout, disables live display.")
-@click.option("--quiet", "-q", is_flag=True, default=False,
-              help="No live display; print one line per responding host.")
-@click.option("--timeout", "-t", type=float, default=None,
-              help="Probe timeout in seconds (overrides per-protocol default).")
-@click.option("--concurrency", "-c", type=int, default=None,
-              help="Max concurrent probes (overrides per-protocol default).")
-@click.option("--resolve/--no-resolve", "-r/-R", default=True,
-              help="Reverse DNS lookup on responding IPs (default: on).")
-@click.option("--watch", "-w", is_flag=True, default=False,
-              help="Re-scan repeatedly on --interval.")
-@click.option("--interval", "-i", type=int, default=30,
-              help="Seconds between re-scans in watch mode (default: 30).")
+@click.option(
+    "--output",
+    "-o",
+    "output_format",
+    type=click.Choice(["json", "csv"]),
+    default=None,
+    help="Output format — prints to stdout, disables live display.",
+)
+@click.option(
+    "--quiet",
+    "-q",
+    is_flag=True,
+    default=False,
+    help="No live display; print one line per responding host.",
+)
+@click.option(
+    "--timeout",
+    "-t",
+    type=float,
+    default=None,
+    help="Probe timeout in seconds (overrides per-protocol default).",
+)
+@click.option(
+    "--concurrency",
+    "-c",
+    type=int,
+    default=None,
+    help="Max concurrent probes (overrides per-protocol default).",
+)
+@click.option(
+    "--resolve/--no-resolve",
+    "-r/-R",
+    default=True,
+    help="Reverse DNS lookup on responding IPs (default: on).",
+)
+@click.option(
+    "--watch", "-w", is_flag=True, default=False, help="Re-scan repeatedly on --interval."
+)
+@click.option(
+    "--interval",
+    "-i",
+    type=int,
+    default=30,
+    help="Seconds between re-scans in watch mode (default: 30).",
+)
 def main(
     destination: str,
     method: str,
@@ -108,11 +138,7 @@ def main(
         except ValueError as e:
             raise click.BadParameter(str(e), param_hint="PORT_SPEC") from e
 
-    mode_label = (
-        "icmp" if method in ICMP_METHODS
-        else "tcp" if method in TCP_METHODS
-        else "udp"
-    )
+    mode_label = "icmp" if method in ICMP_METHODS else "tcp" if method in TCP_METHODS else "udp"
     n_ips = len(ips)
     n_ports = len(ports)
     total = n_ips if mode_label == "icmp" else n_ips * n_ports
@@ -124,7 +150,11 @@ def main(
         eff_timeout = timeout
 
     if concurrency is None:
-        eff_concurrency = {"icmp": ICMP_CONCURRENCY, "tcp": TCP_CONCURRENCY, "udp": UDP_CONCURRENCY}[mode_label]
+        eff_concurrency = {
+            "icmp": ICMP_CONCURRENCY,
+            "tcp": TCP_CONCURRENCY,
+            "udp": UDP_CONCURRENCY,
+        }[mode_label]
     else:
         eff_concurrency = concurrency
 
@@ -174,20 +204,37 @@ def main(
 
             try:
                 if mode_label == "icmp":
-                    asyncio.run(run_icmp_scan(
-                        ips, on_result, on_progress,
-                        timeout=eff_timeout, concurrency=eff_concurrency,
-                    ))
+                    asyncio.run(
+                        run_icmp_scan(
+                            ips,
+                            on_result,
+                            on_progress,
+                            timeout=eff_timeout,
+                            concurrency=eff_concurrency,
+                        )
+                    )
                 elif mode_label == "tcp":
-                    asyncio.run(run_tcp_scan(
-                        ips, ports, on_result, on_progress,
-                        timeout=eff_timeout, concurrency=eff_concurrency,
-                    ))
+                    asyncio.run(
+                        run_tcp_scan(
+                            ips,
+                            ports,
+                            on_result,
+                            on_progress,
+                            timeout=eff_timeout,
+                            concurrency=eff_concurrency,
+                        )
+                    )
                 else:
-                    asyncio.run(run_udp_scan(
-                        ips, ports, on_result, on_progress,
-                        timeout=eff_timeout, concurrency=eff_concurrency,
-                    ))
+                    asyncio.run(
+                        run_udp_scan(
+                            ips,
+                            ports,
+                            on_result,
+                            on_progress,
+                            timeout=eff_timeout,
+                            concurrency=eff_concurrency,
+                        )
+                    )
             except KeyboardInterrupt:
                 interrupted = True
 
@@ -217,8 +264,11 @@ def main(
             console.print("[yellow]Interrupted.[/yellow]")
 
         if output_format:
-            print(_format_json(display.results, mode_label, hostnames) if output_format == "json"
-                  else _format_csv(display.results, mode_label, hostnames))
+            print(
+                _format_json(display.results, mode_label, hostnames)
+                if output_format == "json"
+                else _format_csv(display.results, mode_label, hostnames)
+            )
 
         if not output_format:
             _print_summary(display.results, mode_label, n_ips, n_ports, elapsed)

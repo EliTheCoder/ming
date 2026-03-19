@@ -72,7 +72,12 @@ class ScanDisplay:
             self._live.__enter__()
         return self
 
-    def __exit__(self, exc_type: type[BaseException] | None, exc_val: BaseException | None, exc_tb: types.TracebackType | None) -> None:
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: types.TracebackType | None,
+    ) -> None:
         if not self.quiet and not self.silent:
             if self._show_progress:
                 self._show_progress = False
@@ -161,8 +166,7 @@ class ScanDisplay:
                 cells.append(_fmt_ports_colored(data.get("open_ports", [])))
             else:  # udp
                 reachable = (
-                    Text("✓", style="green") if data.get("reachable")
-                    else Text("✗", style="red")
+                    Text("✓", style="green") if data.get("reachable") else Text("✗", style="red")
                 )
                 cells.append(reachable)
                 cells.append(_fmt_ports_colored(data.get("responded_ports", [])))
