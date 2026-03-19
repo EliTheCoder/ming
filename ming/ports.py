@@ -11,7 +11,6 @@ TOP_100_PORTS = [
 ]
 
 # Nmap top 1000 ports (comprehensive list based on nmap-services frequency data)
-# Starts with frequency-ordered top 100, then remaining common ports
 _EXTRA_PORTS = [
     1, 3, 4, 6, 15, 17, 19, 20, 24, 30, 32, 33, 38, 42, 43, 49, 70, 82, 83,
     84, 85, 89, 99, 100, 109, 125, 146, 161, 163, 211, 212, 222, 254, 255, 256,
@@ -86,26 +85,174 @@ _EXTRA_PORTS = [
     64623, 64680, 65000, 65129, 65389,
 ]
 
-# Build top 1000 list: frequency-ordered top 100 first, then remaining unique ports
 _top100_set = set(TOP_100_PORTS)
 TOP_1000_PORTS = TOP_100_PORTS + [p for p in _EXTRA_PORTS if p not in _top100_set]
+
+# ---------------------------------------------------------------------------
+# Named individual port presets
+# ---------------------------------------------------------------------------
+
+NAMED_PORTS: dict[str, int] = {
+    # Web
+    "http": 80,
+    "https": 443,
+    "http-alt": 8080,
+    "https-alt": 8443,
+    # Remote access
+    "ssh": 22,
+    "telnet": 23,
+    "rdp": 3389,
+    "vnc": 5900,
+    # File transfer / storage
+    "ftp": 21,
+    "ftp-data": 20,
+    "ftps": 990,
+    "tftp": 69,
+    "rsync": 873,
+    "nfs": 2049,
+    "smb": 445,
+    "netbios": 139,
+    # Email
+    "smtp": 25,
+    "smtps": 465,
+    "submission": 587,
+    "pop3": 110,
+    "pop3s": 995,
+    "imap": 143,
+    "imaps": 993,
+    # DNS / network
+    "dns": 53,
+    "mdns": 5353,
+    "snmp": 161,
+    "ntp": 123,
+    "syslog": 514,
+    "bgp": 179,
+    "ldap": 389,
+    "ldaps": 636,
+    "kerberos": 88,
+    "sip": 5060,
+    "sips": 5061,
+    "rtsp": 554,
+    "ipsec": 500,
+    # Databases
+    "mysql": 3306,
+    "mariadb": 3306,
+    "postgres": 5432,
+    "postgresql": 5432,
+    "pg": 5432,
+    "mssql": 1433,
+    "oracle": 1521,
+    "redis": 6379,
+    "mongodb": 27017,
+    "mongo": 27017,
+    "memcached": 11211,
+    "cassandra": 9042,
+    "couchdb": 5984,
+    "elasticsearch": 9200,
+    "elastic": 9200,
+    # DevOps / cloud
+    "docker": 2375,
+    "docker-tls": 2376,
+    "kubernetes": 6443,
+    "k8s": 6443,
+    "etcd": 2379,
+    "kafka": 9092,
+    "zookeeper": 2181,
+    "rabbitmq": 5672,
+    "amqp": 5672,
+    "prometheus": 9090,
+    "grafana": 3000,
+    "kibana": 5601,
+    "jenkins": 8080,
+    "influxdb": 8086,
+    # Other
+    "irc": 6667,
+    "pptp": 1723,
+    "cups": 631,
+    "proxmox": 8006,
+    "openvpn": 1194,
+}
+
+# ---------------------------------------------------------------------------
+# Group presets (multiple ports)
+# ---------------------------------------------------------------------------
+
+PORT_GROUPS: dict[str, list[int]] = {
+    "web":    [80, 443, 8080, 8443, 8000, 8888, 8008, 8081, 3000],
+    "db":     [3306, 5432, 1433, 6379, 27017, 5984, 9200, 9042, 11211, 1521],
+    "remote": [22, 23, 3389, 5900, 5901],
+    "mail":   [25, 110, 143, 465, 587, 993, 995],
+    "file":   [20, 21, 69, 139, 445, 873, 990, 2049],
+    "devops": [2375, 2376, 6443, 9200, 5601, 9090, 9092, 2181, 3000, 8086, 2379],
+}
+
+# ---------------------------------------------------------------------------
+# Port color categories for display
+# ---------------------------------------------------------------------------
+
+_WEB_PORTS = frozenset(
+    PORT_GROUPS["web"]
+    + [81, 8001, 8007, 8009, 8010, 8011, 8082, 8083, 8084, 8085, 8086, 8087,
+       8088, 8089, 8090, 8091, 8093, 8097, 8099, 8100, 8180, 8181, 8200, 8888,
+       9000, 9080, 9090, 9443, 4200]
+)
+_DB_PORTS = frozenset(PORT_GROUPS["db"])
+_REMOTE_PORTS = frozenset(PORT_GROUPS["remote"] + [5902, 5903, 5904, 6001])
+_MAIL_PORTS = frozenset(PORT_GROUPS["mail"])
+_FILE_PORTS = frozenset(PORT_GROUPS["file"])
+_NET_PORTS = frozenset([53, 123, 161, 162, 179, 500, 514, 1194, 5353])
+
+
+def port_color(port: int) -> str:
+    """Return the Rich color string for a port number."""
+    if port in _WEB_PORTS:
+        return "cyan"
+    if port in _DB_PORTS:
+        return "yellow"
+    if port in _REMOTE_PORTS:
+        return "green"
+    if port in _MAIL_PORTS:
+        return "magenta"
+    if port in _FILE_PORTS:
+        return "blue"
+    if port in _NET_PORTS:
+        return "bright_blue"
+    return "white"
+
+
+# ---------------------------------------------------------------------------
+# Port spec parser
+# ---------------------------------------------------------------------------
 
 
 def parse_port_spec(spec: str | None) -> list[int]:
     """Parse a port specification string into a sorted list of port numbers."""
-    if spec is None or spec.lower() in ("common", "common1000", "top1000"):
+    if spec is None:
         return TOP_1000_PORTS
-    if spec.lower() in ("common100", "top100"):
-        return TOP_100_PORTS
 
     ports: set[int] = set()
     for part in spec.split(","):
         part = part.strip()
         if not part:
             continue
-        if "-" in part:
+        lower = part.lower()
+
+        # Top-N keywords
+        if lower in ("common", "common1000", "top1000"):
+            ports.update(TOP_1000_PORTS)
+        elif lower in ("common100", "top100"):
+            ports.update(TOP_100_PORTS)
+        # Group presets
+        elif lower in PORT_GROUPS:
+            ports.update(PORT_GROUPS[lower])
+        # Named individual ports — checked BEFORE range parsing to handle names with hyphens
+        elif lower in NAMED_PORTS:
+            ports.add(NAMED_PORTS[lower])
+        # Port range
+        elif "-" in part:
             lo, hi = part.split("-", 1)
             ports.update(range(int(lo), int(hi) + 1))
+        # Single port
         else:
             ports.add(int(part))
 

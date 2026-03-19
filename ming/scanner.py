@@ -1,4 +1,5 @@
 import asyncio
+import ipaddress
 import socket
 from collections.abc import Callable
 
@@ -39,11 +40,21 @@ async def _tcp_probe(ip: str, port: int, timeout: float) -> bool:
 
 async def _udp_probe(ip: str, port: int, timeout: float) -> str:
     """Returns 'responded', 'reachable', or 'closed'."""
-    loop = asyncio.get_event_loop()
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    loop = asyncio.get_running_loop()
+    try:
+        addr = ipaddress.ip_address(ip)
+        family = socket.AF_INET6 if addr.version == 6 else socket.AF_INET
+    except ValueError:
+        family = socket.AF_INET
+
+    sock = socket.socket(family, socket.SOCK_DGRAM)
     sock.setblocking(False)
     try:
-        sock.connect((ip, port))
+        # Use getaddrinfo to get the correct connect address for both IPv4 and IPv6
+        addrinfos = socket.getaddrinfo(ip, port, family, socket.SOCK_DGRAM)
+        connect_addr = addrinfos[0][4]
+        sock.connect(connect_addr)
+
         try:
             await loop.sock_sendall(sock, b"\x00\x00")
         except (ConnectionRefusedError, ConnectionResetError):
@@ -71,8 +82,9 @@ async def run_icmp_scan(
     on_result: Callable[[str, dict], None],
     on_progress: Callable[[], None],
     timeout: float = ICMP_TIMEOUT,
+    concurrency: int = ICMP_CONCURRENCY,
 ) -> None:
-    sem = asyncio.Semaphore(ICMP_CONCURRENCY)
+    sem = asyncio.Semaphore(concurrency)
 
     async def scan_one(ip: str) -> None:
         async with sem:
@@ -93,8 +105,9 @@ async def run_tcp_scan(
     on_result: Callable[[str, dict], None],
     on_progress: Callable[[], None],
     timeout: float = TCP_TIMEOUT,
+    concurrency: int = TCP_CONCURRENCY,
 ) -> None:
-    sem = asyncio.Semaphore(TCP_CONCURRENCY)
+    sem = asyncio.Semaphore(concurrency)
     ip_ports: dict[str, list[int]] = {}
 
     async def scan_one(ip: str, port: int) -> None:
@@ -119,8 +132,9 @@ async def run_udp_scan(
     on_result: Callable[[str, dict], None],
     on_progress: Callable[[], None],
     timeout: float = UDP_TIMEOUT,
+    concurrency: int = UDP_CONCURRENCY,
 ) -> None:
-    sem = asyncio.Semaphore(UDP_CONCURRENCY)
+    sem = asyncio.Semaphore(concurrency)
     ip_data: dict[str, dict] = {}
 
     async def scan_one(ip: str, port: int) -> None:
