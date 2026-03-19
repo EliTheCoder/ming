@@ -66,7 +66,7 @@ class ScanDisplay:
                 transient=False,
             )
 
-    def __enter__(self) -> "ScanDisplay":
+    def __enter__(self) -> ScanDisplay:
         if not self.quiet and not self.silent:
             self._live.__enter__()
         return self

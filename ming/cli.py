@@ -2,16 +2,12 @@ import asyncio
 import csv
 import io
 import ipaddress
-
-def _ip_sort_key(ip: str) -> tuple:
-    addr = ipaddress.ip_address(ip)
-    return (addr.version, int(addr))
 import json
 import time
 
 import click
 
-from ming.display import ScanDisplay, _fmt_ports, console
+from ming.display import ScanDisplay, console
 from ming.ports import parse_port_spec
 from ming.resolve import resolve_all
 from ming.scanner import (
@@ -26,6 +22,12 @@ from ming.scanner import (
     run_udp_scan,
 )
 from ming.targets import expand_targets
+
+
+def _ip_sort_key(ip: str) -> tuple:
+    addr = ipaddress.ip_address(ip)
+    return (addr.version, int(addr))
+
 
 VALID_METHODS = {"icmp", "ping", "syn", "tcp", "udp"}
 ICMP_METHODS = {"icmp", "ping"}
@@ -133,7 +135,6 @@ def main(
     # Scan loop (runs once normally, loops in watch mode)
     # ------------------------------------------------------------------
     previous_ips: set[str] = set()
-    new_ips: set[str] = set()
     hostname_cache: dict[str, str | None] = {}
     scan_num = 0
 
