@@ -10,7 +10,7 @@ def expand_targets(destination: str) -> list[str]:
       - CIDR range:    192.168.1.0/24
       - Wildcard:      192.168.1.*  (equivalent to 192.168.1.0/24)
     """
-    if "*" in destination:
+    if "x" in destination.split("."):
         destination = _wildcard_to_cidr(destination)
 
     try:
@@ -27,9 +27,9 @@ def expand_targets(destination: str) -> list[str]:
 
 def _wildcard_to_cidr(destination: str) -> str:
     parts = destination.split(".")
-    if "*" not in parts:
+    if "x" not in parts:
         raise ValueError(f"Unexpected wildcard position in '{destination}'")
-    wildcard_idx = parts.index("*")
+    wildcard_idx = parts.index("x")
     prefix_bits = wildcard_idx * 8
     cidr_parts = parts[:wildcard_idx] + ["0"] * (4 - wildcard_idx)
     return ".".join(cidr_parts) + f"/{prefix_bits}"

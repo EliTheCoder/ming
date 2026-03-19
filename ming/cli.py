@@ -22,7 +22,7 @@ def main(destination: str, method: str, port_spec: str | None) -> None:
     Multi-ping network scanner.
 
     \b
-    DESTINATION  IP, CIDR range, or wildcard  (e.g. 192.168.1.1, 192.168.1.0/24, 192.168.1.*)
+    DESTINATION  IP, CIDR range, or wildcard  (e.g. 192.168.1.1, 192.168.1.0/24, 192.168.1.x)
     METHOD       icmp|ping|syn|tcp|udp         (default: icmp)
     PORT_SPEC    ports for tcp/udp mode        (e.g. 80, 80,443, 8000-8080, top100)
     """
