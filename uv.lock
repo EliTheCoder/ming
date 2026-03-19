@@ -1,6 +1,6 @@
 version = 1
 revision = 3
-requires-python = ">=3.14"
+requires-python = ">=3.11"
 
 [[package]]
 name = "click"
@@ -63,9 +63,9 @@ wheels = [
 ]
 
 [[package]]
-name = "ming"
+name = "mingping"
 version = "0.1.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "click" },
     { name = "icmplib" },
