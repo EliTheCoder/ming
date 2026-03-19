@@ -2,6 +2,11 @@
 
 A fast, async multi-ping network scanner with a live terminal UI.
 
+[![PyPI](https://img.shields.io/pypi/v/mingping)](https://pypi.org/project/mingping)
+[![Python](https://img.shields.io/pypi/pyversions/mingping)](https://pypi.org/project/mingping)
+[![License](https://img.shields.io/pypi/l/mingping)](https://github.com/EliTheCoder/ming/blob/main/LICENSE)
+[![GitHub Stars](https://img.shields.io/github/stars/EliTheCoder/ming?style=flat)](https://github.com/EliTheCoder/ming)
+
 ![demo](demo.gif)
 
 ---
