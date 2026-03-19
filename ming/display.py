@@ -73,6 +73,9 @@ class ScanDisplay:
 
     def __exit__(self, *args: object) -> None:
         if not self.quiet and not self.silent:
+            if self._show_progress:
+                self._show_progress = False
+                self._live.update(self._render())
             self._live.__exit__(*args)
 
     # ------------------------------------------------------------------
