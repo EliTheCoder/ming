@@ -137,40 +137,41 @@ def main(
     hostname_cache: dict[str, str | None] = {}
     scan_num = 0
 
-    try:
-        while True:
-            scan_num += 1
-            current_ips: set[str] = set()
+    while True:
+        scan_num += 1
+        current_ips: set[str] = set()
+        interrupted = False
 
-            if not suppress_display:
-                if mode_label == "icmp":
-                    console.print(f"[bold]Scanning {n_ips} host(s) via ICMP[/bold]")
-                else:
-                    console.print(
-                        f"[bold]Scanning {n_ips} host(s) × {n_ports} port(s)"
-                        f" via {method.upper()}[/bold]"
-                    )
+        if not suppress_display:
+            if mode_label == "icmp":
+                console.print(f"[bold]Scanning {n_ips} host(s) via ICMP[/bold]")
+            else:
+                console.print(
+                    f"[bold]Scanning {n_ips} host(s) × {n_ports} port(s)"
+                    f" via {method.upper()}[/bold]"
+                )
 
-            start_time = time.monotonic()
+        start_time = time.monotonic()
 
-            watch_scan_num = scan_num if watch else 0
-            with ScanDisplay(
-                mode_label,
-                total,
-                quiet=quiet and not use_silent,
-                silent=use_silent,
-                resolve=resolve,
-                watch_scan=watch_scan_num,
-                show_progress=n_ips > 1,
-            ) as display:
+        watch_scan_num = scan_num if watch else 0
+        with ScanDisplay(
+            mode_label,
+            total,
+            quiet=quiet and not use_silent,
+            silent=use_silent,
+            resolve=resolve,
+            watch_scan=watch_scan_num,
+            show_progress=n_ips > 1,
+        ) as display:
 
-                def on_result(ip: str, data: dict) -> None:
-                    current_ips.add(ip)
-                    display.update_host(ip, data)
+            def on_result(ip: str, data: dict) -> None:
+                current_ips.add(ip)
+                display.update_host(ip, data)
 
-                def on_progress() -> None:
-                    display.advance()
+            def on_progress() -> None:
+                display.advance()
 
+            try:
                 if mode_label == "icmp":
                     asyncio.run(run_icmp_scan(
                         ips, on_result, on_progress,
@@ -186,46 +187,50 @@ def main(
                         ips, ports, on_result, on_progress,
                         timeout=eff_timeout, concurrency=eff_concurrency,
                     ))
+            except KeyboardInterrupt:
+                interrupted = True
 
-                # Highlight new hosts in watch mode (after scan, before display closes)
-                if watch and previous_ips:
-                    display.set_new_ips(current_ips - previous_ips)
+            # Highlight new hosts in watch mode (after scan, before display closes)
+            if watch and previous_ips:
+                display.set_new_ips(current_ips - previous_ips)
 
-                # Reverse DNS resolution (still inside `with`, so Live is active)
-                hostnames: dict[str, str | None] | None = None
-                if resolve and display.results:
+            # Reverse DNS resolution — skip if interrupted
+            hostnames: dict[str, str | None] | None = None
+            if resolve and display.results and not interrupted:
+                try:
                     new_to_resolve = set(display.results) - set(hostname_cache)
                     if new_to_resolve:
                         new_h = asyncio.run(resolve_all(list(new_to_resolve)))
                         hostname_cache.update(new_h)
                     hostnames = {ip: hostname_cache.get(ip) for ip in display.results}
                     display.set_hostnames(hostnames)
+                except KeyboardInterrupt:
+                    interrupted = True
 
-            # ----------------------------------------------------------
-            # Post-scan: output, stats
-            # ----------------------------------------------------------
-            elapsed = time.monotonic() - start_time
+        # ----------------------------------------------------------
+        # Post-scan: output, stats
+        # ----------------------------------------------------------
+        elapsed = time.monotonic() - start_time
 
-            if output_format:
-                if output_format == "json":
-                    print(_format_json(display.results, mode_label, hostnames))
-                else:
-                    print(_format_csv(display.results, mode_label, hostnames))
+        if interrupted and not suppress_display:
+            console.print("[yellow]Interrupted.[/yellow]")
 
-            if not output_format:
-                _print_summary(display.results, mode_label, n_ips, n_ports, elapsed)
+        if output_format:
+            print(_format_json(display.results, mode_label, hostnames) if output_format == "json"
+                  else _format_csv(display.results, mode_label, hostnames))
 
-            if not watch:
-                break
+        if not output_format:
+            _print_summary(display.results, mode_label, n_ips, n_ports, elapsed)
 
-            previous_ips = set(display.results.keys())
-            new_ips = current_ips - previous_ips
+        if interrupted or not watch:
+            break
+
+        previous_ips = set(display.results.keys())
+        try:
             console.print(f"[dim]Waiting {interval}s... (Ctrl+C to stop)[/dim]")
             time.sleep(interval)
-
-    except KeyboardInterrupt:
-        if watch:
-            console.print("\n[yellow]Watch stopped.[/yellow]")
+        except KeyboardInterrupt:
+            break
 
 
 # ------------------------------------------------------------------
