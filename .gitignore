@@ -8,3 +8,15 @@ wheels/
 
 # Virtual environments
 .venv
+
+# macOS
+.DS_Store
+
+# Demo artifacts
+demo.mp4
+demo.tape
+
+# Editors
+.idea/
+.vscode/
+*.swp
