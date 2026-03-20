@@ -1,16 +1,56 @@
-name: Publish to PyPI
+name: Release
 
 on:
   release:
     types: [published]
 
-permissions:
-  id-token: write
-
 jobs:
-  publish:
+  build-binaries:
+    name: Build binary (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            asset_name: ming-linux-x86_64
+          - os: macos-latest
+            asset_name: ming-macos-arm64
+          - os: windows-latest
+            asset_name: ming-windows-x86_64.exe
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Build binary
+        run: uv run pyinstaller --onefile --name ming --collect-all icmplib ming/cli.py
+
+      - name: Upload binary to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/ming${{ matrix.os == 'windows-latest' && '.exe' || '' }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Rename artifact for upload
+        shell: bash
+        run: |
+          mv dist/ming${{ matrix.os == 'windows-latest' && '.exe' || '' }} dist/${{ matrix.asset_name }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset_name }}
+          path: dist/${{ matrix.asset_name }}
+
+  publish-pypi:
+    name: Publish to PyPI
     runs-on: ubuntu-latest
     environment: pypi
+    permissions:
+      id-token: write
     steps:
       - uses: actions/checkout@v4
 

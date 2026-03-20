@@ -377,3 +377,7 @@ def _print_summary(
             f"[green]{reachable} reachable host(s), {responded} port(s) responded[/green]  "
             f"[dim]{n_ips} hosts × {n_ports} ports — {elapsed:.1f}s[/dim]"
         )
+
+
+if __name__ == "__main__":
+    main()

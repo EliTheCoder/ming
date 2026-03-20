@@ -12,6 +12,10 @@ wheels/
 # macOS
 .DS_Store
 
+# PyInstaller
+ming.spec
+*.spec
+
 # Demo artifacts
 demo.mp4
 demo.tape
