@@ -119,6 +119,7 @@ async def run_tcp_scan(
     on_progress: Callable[[], None],
     timeout: float = TCP_TIMEOUT,
     concurrency: int = TCP_CONCURRENCY,
+    max_concurrency: int | None = None,
 ) -> None:
     queue: asyncio.Queue = asyncio.Queue()
     # Port-major ordering: interleave hosts so workers spread load evenly
@@ -134,10 +135,15 @@ async def run_tcp_scan(
     # Timeouts mean packets are being dropped (throttled/filtered).
     # RST/refused connections are fast and expected — not a signal.
     #
-    # To reduce concurrency we "consume" semaphore slots (acquire without
-    # releasing). Workers back off naturally because fewer slots are free.
-    # To recover we release those consumed slots back.
+    # `concurrency`     — starting (conservative) limit
+    # `max_concurrency` — ceiling for adaptive growth (defaults to concurrency)
+    #
+    # To reduce: consume semaphore slots (acquire without releasing).
+    # To recover: release those consumed slots back, up to max_concurrency.
+    # Workers are always spawned at max_concurrency so they're ready when
+    # extra slots open up — the semaphore controls actual parallelism.
     # ------------------------------------------------------------------
+    _max_conc = max_concurrency if max_concurrency is not None else concurrency
     sem = asyncio.Semaphore(concurrency)
     current_conc = concurrency
     min_conc = max(5, concurrency // 10)
@@ -150,7 +156,7 @@ async def run_tcp_scan(
             return
         rate = sum(window) / len(window)
         if rate > 0.25 and current_conc > min_conc:
-            # Too many timeouts — halve concurrency (consume slots).
+            # Too many timeouts — reduce by 25% (consume slots).
             adjusting = True
             new = max(min_conc, current_conc * 3 // 4)
             delta = current_conc - new
@@ -158,9 +164,9 @@ async def run_tcp_scan(
             for _ in range(delta):
                 await sem.acquire()
             adjusting = False
-        elif rate < 0.05 and current_conc < concurrency:
+        elif rate < 0.05 and current_conc < _max_conc:
             # Mostly RSTs, network is healthy — grow by 25% (release slots).
-            new = min(concurrency, current_conc + max(1, current_conc // 4))
+            new = min(_max_conc, current_conc + max(1, current_conc // 4))
             delta = new - current_conc
             current_conc = new
             for _ in range(delta):
@@ -187,7 +193,9 @@ async def run_tcp_scan(
                 on_result(ip, {"open_ports": sorted(ip_ports[ip])})
 
     total = len(ips) * len(ports)
-    n_workers = min(concurrency, total) if total else 0
+    # Spawn workers up to _max_conc so they're ready as adaptive recovery
+    # releases more slots — semaphore caps actual in-flight probes.
+    n_workers = min(_max_conc, total) if total else 0
     await asyncio.gather(
         *[asyncio.create_task(worker()) for _ in range(n_workers)],
         return_exceptions=True,

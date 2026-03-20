@@ -289,7 +289,12 @@ def main(
                     # Phase 2: TCP scan on live hosts only
                     alive_ips = list(display.results)
                     if alive_ips and ports:
-                        tcp_conc = _tcp_concurrency(len(alive_ips))
+                        # Start conservative (same rate as full-subnet TCP scan)
+                        # so we don't flood the network before the adaptive has
+                        # a chance to measure it. max_concurrency lets it grow
+                        # back up to TCP_CONCURRENCY if the network is healthy.
+                        tcp_conc = _tcp_concurrency(n_ips)
+                        tcp_max = concurrency if concurrency is not None else TCP_CONCURRENCY
                         display.reset_progress(len(alive_ips) * n_ports, "TCP scanning")
                         asyncio.run(
                             _run(
@@ -300,6 +305,7 @@ def main(
                                     on_progress,
                                     timeout=TCP_TIMEOUT,
                                     concurrency=tcp_conc,
+                                    max_concurrency=tcp_max,
                                 )
                             )
                         )
