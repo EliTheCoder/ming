@@ -117,8 +117,10 @@ async def run_tcp_scan(
     concurrency: int = TCP_CONCURRENCY,
 ) -> None:
     queue: asyncio.Queue = asyncio.Queue()
-    for ip in ips:
-        for port in ports:
+    # Port-major ordering: interleave hosts so workers spread load evenly
+    # rather than hammering one host with all workers at once.
+    for port in ports:
+        for ip in ips:
             queue.put_nowait((ip, port))
 
     ip_ports: dict[str, list[int]] = {}
