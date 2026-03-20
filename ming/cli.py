@@ -9,7 +9,7 @@ import click
 
 from ming.display import ScanDisplay, console
 from ming.ports import parse_port_spec
-from ming.resolve import resolve_all
+from ming.resolve import resolve_one
 from ming.scanner import (
     ICMP_CONCURRENCY,
     ICMP_TIMEOUT,
@@ -222,71 +222,98 @@ def main(
             watch_scan=watch_scan_num,
             show_progress=n_ips > 1,
         ) as display:
+            # Tasks spawned per-IP as results arrive; awaited before event loop exits.
+            resolve_tasks: list[asyncio.Task[None]] = []
+            resolving_ips: set[str] = set()
+
+            async def _resolve_and_update(ip: str) -> None:
+                hostname = await resolve_one(ip)
+                hostname_cache[ip] = hostname
+                display.update_hostname(ip, hostname)
 
             def on_result(ip: str, data: dict) -> None:
                 current_ips.add(ip)
                 display.update_host(ip, data)
+                if resolve and ip not in resolving_ips:
+                    resolving_ips.add(ip)
+                    resolve_tasks.append(asyncio.create_task(_resolve_and_update(ip)))
 
             def on_progress() -> None:
                 display.advance()
 
+            async def _run(scan_coro) -> None:
+                await scan_coro
+                if resolve_tasks:
+                    await asyncio.gather(*resolve_tasks, return_exceptions=True)
+
             try:
                 if mode_label == "icmp":
                     asyncio.run(
-                        run_icmp_scan(
-                            ips,
-                            on_result,
-                            on_progress,
-                            timeout=eff_timeout,
-                            concurrency=eff_concurrency,
+                        _run(
+                            run_icmp_scan(
+                                ips,
+                                on_result,
+                                on_progress,
+                                timeout=eff_timeout,
+                                concurrency=eff_concurrency,
+                            )
                         )
                     )
                 elif mode_label == "tcp":
                     asyncio.run(
-                        run_tcp_scan(
-                            ips,
-                            ports,
-                            on_result,
-                            on_progress,
-                            timeout=eff_timeout,
-                            concurrency=eff_concurrency,
+                        _run(
+                            run_tcp_scan(
+                                ips,
+                                ports,
+                                on_result,
+                                on_progress,
+                                timeout=eff_timeout,
+                                concurrency=eff_concurrency,
+                            )
                         )
                     )
                 elif mode_label == "smart":
-                    # Phase 1: ICMP sweep
+                    # Phase 1: ICMP sweep (resolve fires per alive host)
                     asyncio.run(
-                        run_icmp_scan(
-                            ips,
-                            on_result,
-                            on_progress,
-                            timeout=ICMP_TIMEOUT,
-                            concurrency=eff_concurrency,
+                        _run(
+                            run_icmp_scan(
+                                ips,
+                                on_result,
+                                on_progress,
+                                timeout=ICMP_TIMEOUT,
+                                concurrency=eff_concurrency,
+                            )
                         )
                     )
+                    resolve_tasks.clear()  # already awaited; clear before phase 2
                     # Phase 2: TCP scan on live hosts only
                     alive_ips = list(display.results)
                     if alive_ips and ports:
                         tcp_conc = _tcp_concurrency(len(alive_ips))
                         display.reset_progress(len(alive_ips) * n_ports, "TCP scanning")
                         asyncio.run(
-                            run_tcp_scan(
-                                alive_ips,
-                                ports,
-                                on_result,
-                                on_progress,
-                                timeout=TCP_TIMEOUT,
-                                concurrency=tcp_conc,
+                            _run(
+                                run_tcp_scan(
+                                    alive_ips,
+                                    ports,
+                                    on_result,
+                                    on_progress,
+                                    timeout=TCP_TIMEOUT,
+                                    concurrency=tcp_conc,
+                                )
                             )
                         )
                 else:
                     asyncio.run(
-                        run_udp_scan(
-                            ips,
-                            ports,
-                            on_result,
-                            on_progress,
-                            timeout=eff_timeout,
-                            concurrency=eff_concurrency,
+                        _run(
+                            run_udp_scan(
+                                ips,
+                                ports,
+                                on_result,
+                                on_progress,
+                                timeout=eff_timeout,
+                                concurrency=eff_concurrency,
+                            )
                         )
                     )
             except KeyboardInterrupt:
@@ -296,18 +323,13 @@ def main(
             if watch and previous_ips:
                 display.set_new_ips(current_ips - previous_ips)
 
-            # Reverse DNS resolution — skip if interrupted
+            # Live display already updated incrementally via update_hostname().
+            # Build hostnames dict for quiet / --output modes.
             hostnames: dict[str, str | None] | None = None
-            if resolve and display.results and not interrupted:
-                try:
-                    new_to_resolve = set(display.results) - set(hostname_cache)
-                    if new_to_resolve:
-                        new_h = asyncio.run(resolve_all(list(new_to_resolve)))
-                        hostname_cache.update(new_h)
-                    hostnames = {ip: hostname_cache.get(ip) for ip in display.results}
-                    display.set_hostnames(hostnames)
-                except KeyboardInterrupt:
-                    interrupted = True
+            if resolve and display.results:
+                hostnames = {ip: hostname_cache.get(ip) for ip in display.results}
+                if quiet and not interrupted:
+                    display.set_hostnames(hostnames)  # triggers print_quiet_results()
 
         # ----------------------------------------------------------
         # Post-scan: output, stats

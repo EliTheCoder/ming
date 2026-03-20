@@ -119,6 +119,12 @@ class ScanDisplay:
             self.progress.advance(self._task_id)
         self._live.update(self._render())
 
+    def update_hostname(self, ip: str, hostname: str | None) -> None:
+        """Update a single hostname and redraw (called in real-time during scan)."""
+        self.hostnames[ip] = hostname
+        if not self.quiet and not self.silent:
+            self._live.update(self._render())
+
     def set_hostnames(self, hostnames: dict[str, str | None]) -> None:
         self.hostnames = hostnames
         if self.silent:
