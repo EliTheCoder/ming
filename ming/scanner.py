@@ -1,4 +1,5 @@
 import asyncio
+import collections
 import contextlib
 import ipaddress
 import socket
@@ -23,7 +24,8 @@ async def _icmp_probe(ip: str, timeout: float) -> tuple[bool, float]:
         return False, 0.0
 
 
-async def _tcp_probe(ip: str, port: int, timeout: float) -> bool:
+async def _tcp_probe(ip: str, port: int, timeout: float) -> str:
+    """Returns 'open', 'closed' (RST/refused), or 'timeout' (packet dropped)."""
     try:
         _, writer = await asyncio.wait_for(
             asyncio.open_connection(ip, port),
@@ -32,9 +34,11 @@ async def _tcp_probe(ip: str, port: int, timeout: float) -> bool:
         writer.close()
         with contextlib.suppress(Exception):
             await writer.wait_closed()
-        return True
+        return "open"
+    except TimeoutError:
+        return "timeout"
     except Exception:
-        return False
+        return "closed"
 
 
 async def _udp_probe(ip: str, port: int, timeout: float) -> str:
@@ -125,6 +129,43 @@ async def run_tcp_scan(
 
     ip_ports: dict[str, list[int]] = {}
 
+    # ------------------------------------------------------------------
+    # Adaptive concurrency: track timeout ratio in a sliding window.
+    # Timeouts mean packets are being dropped (throttled/filtered).
+    # RST/refused connections are fast and expected — not a signal.
+    #
+    # To reduce concurrency we "consume" semaphore slots (acquire without
+    # releasing). Workers back off naturally because fewer slots are free.
+    # To recover we release those consumed slots back.
+    # ------------------------------------------------------------------
+    sem = asyncio.Semaphore(concurrency)
+    current_conc = concurrency
+    min_conc = max(5, concurrency // 10)
+    window: collections.deque[bool] = collections.deque(maxlen=30)
+    adjusting = False
+
+    async def _adjust() -> None:
+        nonlocal current_conc, adjusting
+        if adjusting or len(window) < 10:
+            return
+        rate = sum(window) / len(window)
+        if rate > 0.25 and current_conc > min_conc:
+            # Too many timeouts — halve concurrency (consume slots).
+            adjusting = True
+            new = max(min_conc, current_conc * 3 // 4)
+            delta = current_conc - new
+            current_conc = new
+            for _ in range(delta):
+                await sem.acquire()
+            adjusting = False
+        elif rate < 0.05 and current_conc < concurrency:
+            # Mostly RSTs, network is healthy — grow by 25% (release slots).
+            new = min(concurrency, current_conc + max(1, current_conc // 4))
+            delta = new - current_conc
+            current_conc = new
+            for _ in range(delta):
+                sem.release()
+
     async def worker() -> None:
         while True:
             try:
@@ -132,11 +173,14 @@ async def run_tcp_scan(
             except asyncio.QueueEmpty:
                 return
             try:
-                is_open = await _tcp_probe(ip, port, timeout)
+                async with sem:
+                    result = await _tcp_probe(ip, port, timeout)
             except asyncio.CancelledError:
                 return
             on_progress()
-            if is_open:
+            window.append(result == "timeout")
+            await _adjust()
+            if result == "open":
                 if ip not in ip_ports:
                     ip_ports[ip] = []
                 ip_ports[ip].append(port)
