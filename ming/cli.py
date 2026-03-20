@@ -29,10 +29,11 @@ def _ip_sort_key(ip: str) -> tuple:
     return (addr.version, int(addr))
 
 
-VALID_METHODS = {"icmp", "ping", "syn", "tcp", "udp"}
+VALID_METHODS = {"icmp", "ping", "syn", "tcp", "udp", "smart", "ping+tcp", "icmp+tcp"}
 ICMP_METHODS = {"icmp", "ping"}
 TCP_METHODS = {"syn", "tcp"}
 UDP_METHODS = {"udp"}
+SMART_METHODS = {"smart", "ping+tcp", "icmp+tcp"}
 
 
 @click.command(context_settings={"help_option_names": ["-h", "--help"]})
@@ -102,8 +103,8 @@ def main(
     \b
     DESTINATION  IP, CIDR, wildcard, or hostname  (e.g. 192.168.1.1, 192.168.1.0/24,
                  192.168.1.x, localhost, google.com, 10.0.0.1,10.0.1.1)
-    METHOD       icmp|ping|syn|tcp|udp             (default: icmp)
-    PORT_SPEC    ports for tcp/udp mode            (e.g. 80, 80,443, 8000-8080,
+    METHOD       icmp|ping|syn|tcp|udp|smart       (default: icmp)
+    PORT_SPEC    ports for tcp/udp/smart mode      (e.g. 80, 80,443, 8000-8080,
                  top100, web, db, ssh, http, postgres)
     """
     method = method.lower()
@@ -114,7 +115,7 @@ def main(
         )
 
     if port_spec is not None and method in ICMP_METHODS:
-        raise click.UsageError("Port specification is only supported for tcp/udp modes.")
+        raise click.UsageError("Port specification is only supported for tcp/udp/smart modes.")
 
     if output_format and watch:
         raise click.UsageError("--output and --watch are mutually exclusive.")
@@ -132,33 +133,52 @@ def main(
         return
 
     ports: list[int] = []
-    if method in TCP_METHODS | UDP_METHODS:
+    if method in TCP_METHODS | UDP_METHODS | SMART_METHODS:
         try:
             ports = parse_port_spec(port_spec)
         except ValueError as e:
             raise click.BadParameter(str(e), param_hint="PORT_SPEC") from e
 
-    mode_label = "icmp" if method in ICMP_METHODS else "tcp" if method in TCP_METHODS else "udp"
+    mode_label = (
+        "icmp"
+        if method in ICMP_METHODS
+        else "tcp"
+        if method in TCP_METHODS
+        else "udp"
+        if method in UDP_METHODS
+        else "smart"
+    )
     n_ips = len(ips)
     n_ports = len(ports)
-    total = n_ips if mode_label == "icmp" else n_ips * n_ports
+    total = n_ips if mode_label in ("icmp", "smart") else n_ips * n_ports
 
     # Effective timeout and concurrency
     if timeout is None:
-        eff_timeout = {"icmp": ICMP_TIMEOUT, "tcp": TCP_TIMEOUT, "udp": UDP_TIMEOUT}[mode_label]
+        eff_timeout = {"icmp": ICMP_TIMEOUT, "tcp": TCP_TIMEOUT, "udp": UDP_TIMEOUT}.get(
+            mode_label, TCP_TIMEOUT
+        )
     else:
         eff_timeout = timeout
 
+    def _tcp_concurrency(n: int) -> int:
+        if concurrency is not None:
+            return concurrency
+        base = TCP_CONCURRENCY
+        return min(base, max(50, base // max(1, n // 5))) if n > 1 else base
+
     if concurrency is None:
-        base = {"icmp": ICMP_CONCURRENCY, "tcp": TCP_CONCURRENCY, "udp": UDP_CONCURRENCY}[
-            mode_label
-        ]
-        # Scale down TCP concurrency for subnet scans — high parallelism floods the
-        # local router when all traffic shares the same gateway.
-        if mode_label == "tcp" and n_ips > 1:
-            eff_concurrency = min(base, max(50, base // max(1, n_ips // 5)))
+        if mode_label == "smart":
+            eff_concurrency = ICMP_CONCURRENCY  # phase 1 — TCP concurrency computed later
         else:
-            eff_concurrency = base
+            base = {"icmp": ICMP_CONCURRENCY, "tcp": TCP_CONCURRENCY, "udp": UDP_CONCURRENCY}[
+                mode_label
+            ]
+            # Scale down TCP concurrency for subnet scans — high parallelism floods the
+            # local router when all traffic shares the same gateway.
+            if mode_label == "tcp" and n_ips > 1:
+                eff_concurrency = min(base, max(50, base // max(1, n_ips // 5)))
+            else:
+                eff_concurrency = base
     else:
         eff_concurrency = concurrency
 
@@ -180,6 +200,10 @@ def main(
         if not suppress_display:
             if mode_label == "icmp":
                 console.print(f"[bold]Scanning {n_ips} host(s) via ICMP[/bold]")
+            elif mode_label == "smart":
+                console.print(
+                    f"[bold]Scanning {n_ips} host(s) — ICMP sweep then TCP on live hosts[/bold]"
+                )
             else:
                 console.print(
                     f"[bold]Scanning {n_ips} host(s) × {n_ports} port(s)"
@@ -228,6 +252,32 @@ def main(
                             concurrency=eff_concurrency,
                         )
                     )
+                elif mode_label == "smart":
+                    # Phase 1: ICMP sweep
+                    asyncio.run(
+                        run_icmp_scan(
+                            ips,
+                            on_result,
+                            on_progress,
+                            timeout=ICMP_TIMEOUT,
+                            concurrency=eff_concurrency,
+                        )
+                    )
+                    # Phase 2: TCP scan on live hosts only
+                    alive_ips = list(display.results)
+                    if alive_ips and ports:
+                        tcp_conc = _tcp_concurrency(len(alive_ips))
+                        display.reset_progress(len(alive_ips) * n_ports, "TCP scanning")
+                        asyncio.run(
+                            run_tcp_scan(
+                                alive_ips,
+                                ports,
+                                on_result,
+                                on_progress,
+                                timeout=TCP_TIMEOUT,
+                                concurrency=tcp_conc,
+                            )
+                        )
                 else:
                     asyncio.run(
                         run_udp_scan(
@@ -369,6 +419,16 @@ def _print_summary(
         console.print(
             f"[green]{n} host(s) with open ports, {total_ports} open port(s) total[/green]  "
             f"[dim]{n_ips} hosts × {n_ports} ports — {elapsed:.1f}s[/dim]"
+        )
+    elif mode == "smart":
+        n_alive = n
+        n_with_ports = sum(1 for d in results.values() if d.get("open_ports"))
+        total_ports = sum(len(d.get("open_ports", [])) for d in results.values())
+        rate = 100 * n_alive / n_ips if n_ips else 0
+        console.print(
+            f"[green]{n_alive}/{n_ips} hosts alive ({rate:.0f}%), "
+            f"{n_with_ports} with open ports, {total_ports} open port(s) total[/green]  "
+            f"[dim]{elapsed:.1f}s[/dim]"
         )
     else:  # udp
         reachable = sum(1 for d in results.values() if d.get("reachable"))

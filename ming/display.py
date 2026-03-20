@@ -88,8 +88,21 @@ class ScanDisplay:
     # Public update methods
     # ------------------------------------------------------------------
 
+    def reset_progress(self, total: int, description: str = "Scanning") -> None:
+        """Switch the progress bar to a new phase (used by smart mode)."""
+        if not self._show_progress:
+            return
+        self.progress.reset(self._task_id, total=total)
+        self.progress.update(self._task_id, description=description)
+        self._live.update(self._render())
+
     def update_host(self, ip: str, data: dict) -> None:
-        self.results[ip] = data
+        if self.mode == "smart":
+            if ip not in self.results:
+                self.results[ip] = {}
+            self.results[ip].update(data)
+        else:
+            self.results[ip] = data
         if self.silent:
             pass  # buffer only
         elif self.quiet:
@@ -146,6 +159,9 @@ class ScanDisplay:
             table.add_column("RTT (ms)", justify="right")
         elif self.mode in ("tcp", "syn"):
             table.add_column("Open Ports")
+        elif self.mode == "smart":
+            table.add_column("RTT (ms)", justify="right")
+            table.add_column("Open Ports")
         else:  # udp
             table.add_column("Reachable", justify="center")
             table.add_column("Responded Ports")
@@ -163,6 +179,9 @@ class ScanDisplay:
             if self.mode == "icmp":
                 cells.append(f"{data['rtt']:.1f}")
             elif self.mode in ("tcp", "syn"):
+                cells.append(_fmt_ports_colored(data.get("open_ports", [])))
+            elif self.mode == "smart":
+                cells.append(f"{data['rtt']:.1f}" if data.get("rtt") else "")
                 cells.append(_fmt_ports_colored(data.get("open_ports", [])))
             else:  # udp
                 reachable = (
@@ -211,6 +230,11 @@ def _print_quiet_line(ip: str, data: dict, mode: str) -> None:
         console.print(f"{ip}  rtt={data['rtt']:.1f}ms")
     elif mode in ("tcp", "syn"):
         console.print(f"{ip}  open={_fmt_ports(data.get('open_ports', []))}")
+    elif mode == "smart":
+        rtt = f"rtt={data['rtt']:.1f}ms  " if data.get("rtt") else ""
+        ports = _fmt_ports(data.get("open_ports", []))
+        open_str = f"open={ports}" if ports else "no open ports"
+        console.print(f"{ip}  {rtt}{open_str}")
     else:
         reachable = "yes" if data.get("reachable") else "no"
         responded = _fmt_ports(data.get("responded_ports", []))
