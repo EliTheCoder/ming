@@ -31,16 +31,16 @@ jobs:
       - name: Build binary
         run: uv run pyinstaller --onefile --name ming --collect-all icmplib ming/cli.py
 
-      - name: Upload binary to release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: dist/ming${{ matrix.os == 'windows-latest' && '.exe' || '' }}
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Rename artifact for upload
+      - name: Rename artifact
         shell: bash
         run: |
           mv dist/ming${{ matrix.os == 'windows-latest' && '.exe' || '' }} dist/${{ matrix.asset_name }}
+
+      - name: Upload binary to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/${{ matrix.asset_name }}
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: actions/upload-artifact@v4
         with:
