@@ -1,6 +1,6 @@
 [project]
 name = "mingping"
-version = "0.1.1"
+version = "0.1.2"
 description = "Fast async multi-ping network scanner with a live terminal UI"
 readme = "README.md"
 requires-python = ">=3.11"
