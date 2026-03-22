@@ -120,6 +120,7 @@ async def run_tcp_scan(
     timeout: float = TCP_TIMEOUT,
     concurrency: int = TCP_CONCURRENCY,
     max_concurrency: int | None = None,
+    min_concurrency: int | None = None,
 ) -> None:
     queue: asyncio.Queue = asyncio.Queue()
     # Port-major ordering: interleave hosts so workers spread load evenly
@@ -146,7 +147,7 @@ async def run_tcp_scan(
     _max_conc = max_concurrency if max_concurrency is not None else concurrency
     sem = asyncio.Semaphore(concurrency)
     current_conc = concurrency
-    min_conc = max(5, concurrency // 10)
+    min_conc = min_concurrency if min_concurrency is not None else max(5, concurrency // 10)
     window: collections.deque[bool] = collections.deque(maxlen=30)
     adjusting = False
 

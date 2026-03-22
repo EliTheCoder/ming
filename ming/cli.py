@@ -289,12 +289,28 @@ def main(
                     # Phase 2: TCP scan on live hosts only
                     alive_ips = list(display.results)
                     if alive_ips and ports:
-                        # Start conservative (same rate as full-subnet TCP scan)
-                        # so we don't flood the network before the adaptive has
-                        # a chance to measure it. max_concurrency lets it grow
-                        # back up to TCP_CONCURRENCY if the network is healthy.
-                        tcp_conc = _tcp_concurrency(n_ips)
-                        tcp_max = concurrency if concurrency is not None else TCP_CONCURRENCY
+                        # Cap at ~3 simultaneous connections per alive host (port-major
+                        # ordering ensures even distribution).  Regular TCP mode scanning
+                        # a full /24 at concurrency=50 gives ~0.2/host on alive hosts
+                        # because dead hosts drain slots quickly; smart mode scans ONLY
+                        # alive hosts so the same concurrency concentrates into ~6/host
+                        # and triggers RST rate limiting.  3/host stays well clear of
+                        # that threshold while being fast enough for 1 000-port scans.
+                        # Single-target scans get the full TCP_CONCURRENCY budget.
+                        n_alive = len(alive_ips)
+                        if concurrency is not None:
+                            tcp_conc = concurrency
+                            tcp_max = concurrency
+                        elif n_ips == 1:
+                            tcp_conc = TCP_CONCURRENCY
+                            tcp_max = TCP_CONCURRENCY
+                        else:
+                            tcp_conc = min(TCP_CONCURRENCY, n_alive * 3)
+                            tcp_max = tcp_conc
+                        # Hosts already responded to ICMP — on a LAN a 300 ms TCP
+                        # timeout is generous; 1 s would make it 3x slower.
+                        # Honour --timeout if the user set one explicitly.
+                        smart_tcp_timeout = timeout if timeout is not None else 0.3
                         display.reset_progress(len(alive_ips) * n_ports, "TCP scanning")
                         asyncio.run(
                             _run(
@@ -303,9 +319,10 @@ def main(
                                     ports,
                                     on_result,
                                     on_progress,
-                                    timeout=TCP_TIMEOUT,
+                                    timeout=smart_tcp_timeout,
                                     concurrency=tcp_conc,
                                     max_concurrency=tcp_max,
+                                    min_concurrency=tcp_conc,
                                 )
                             )
                         )
