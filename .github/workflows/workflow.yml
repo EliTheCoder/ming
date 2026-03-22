@@ -59,6 +59,7 @@ jobs:
         with:
           identifier: EliTheCoder.Ming
           token: ${{ secrets.WINGET_TOKEN }}
+          fork-user: EliTheCoder
 
   publish-pypi:
     name: Publish to PyPI
