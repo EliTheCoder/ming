@@ -50,6 +50,16 @@ jobs:
           name: ${{ matrix.asset_name }}
           path: dist/${{ matrix.asset_name }}
 
+  publish-winget:
+    name: Publish to winget
+    runs-on: windows-latest
+    needs: build-binaries
+    steps:
+      - uses: vedantmgoyal9/winget-releaser@v2
+        with:
+          identifier: EliTheCoder.Ming
+          token: ${{ secrets.WINGET_TOKEN }}
+
   publish-pypi:
     name: Publish to PyPI
     runs-on: ubuntu-latest
