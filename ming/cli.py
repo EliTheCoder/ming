@@ -37,6 +37,7 @@ SMART_METHODS = {"smart", "ping+tcp", "icmp+tcp"}
 
 
 @click.command(context_settings={"help_option_names": ["-h", "--help"]})
+@click.version_option(package_name="mingping")
 @click.argument("destination")
 @click.argument("method", default="icmp", required=False)
 @click.argument("port_spec", default=None, required=False)
